@@ -1,0 +1,557 @@
+#
+# Copyright (c) 2024 by Dribia Data Research.
+# This file is part of project Brainer,
+# and is released under the MIT License Agreement.
+# See the LICENSE file for more information.
+#
+from datetime import datetime
+
+import numpy as np
+
+# External modules
+import pandas as pd
+import seaborn as sns
+import umap
+from matplotlib import pyplot as pltd
+from pandera import SchemaModel
+from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
+from scipy.spatial.distance import squareform
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
+
+from brainer.core import config
+from brainer.crud.bq_crud_base import BigQueryCRUDBase
+from brainer.crud.scores_crud import crud_scores_service
+from brainer.viz import theme
+
+pd.set_option("display.max_columns", 500)
+pd.set_option("display.width", 1000)
+theme.enable()
+days_of_week = {
+    1: "Sunday",
+    2: "Monday",
+    3: "Tuesday",
+    4: "Wednesday",
+    5: "Thursday",
+    6: "Friday",
+    7: "Saturday",
+}
+
+
+def plot_umap(data, labels):
+    """Given an array of data and corresponding labels, computes UMAP embeddings
+    and plots a 2D visualization with colored labels.
+
+    Parameters:
+    - data: numpy array, shape (n_samples, n_features)
+    - labels: numpy array, shape (n_samples,)
+    """
+    # Compute UMAP embeddings
+    reducer = umap.UMAP()
+    embeddings = reducer.fit_transform(data)
+
+    # Get unique labels and assign colors
+    unique_labels = np.unique(labels)
+    label_colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_labels)))
+
+    # Plot the 2D visualization
+    plt.figure(figsize=(10, 8))
+    for i, label in enumerate(unique_labels):
+        indices = np.where(labels == label)
+        plt.scatter(
+            embeddings[indices, 0],
+            embeddings[indices, 1],
+            label=str(label),
+            color=label_colors[i],
+        )
+
+    plt.title("UMAP 2D Visualization")
+    plt.xlabel("UMAP Dimension 1")
+    plt.ylabel("UMAP Dimension 2")
+    plt.legend()
+    plt.show()
+    plt.clf()
+
+
+class BaseDFSchemaNoFilter(SchemaModel):
+    """Base dataframe schema.
+
+    Every Pandera dataframe schema inherits this base, and therefore
+    inherits its configuration.
+
+    """
+
+    class Config:
+        """Pandera dataframe schemas configuration."""
+
+        coerce = True
+        """Coerce types when possible instead of raising a validation
+        error."""
+
+
+def plot_percentage_bar(df, col_name):
+    """Create a bar plot with the percentage of occurrences of each category in the specified column.
+
+    Parameters:
+    - df: DataFrame
+    - col_name: str, the name of the column in the DataFrame
+
+    Returns:
+    - None
+    """
+    # Count the occurrences of each category in the specified column
+    if col == "day_of_week":
+        category_counts = (
+            df[col_name].map(days_of_week).value_counts(normalize=True) * 100
+        )
+    else:
+        category_counts = df[col_name].value_counts(normalize=True) * 100
+
+    # Sort categories by descending counts
+    category_counts = category_counts.sort_values(ascending=True)
+
+    # Create a bar plot using Seaborn
+    categories = [str(cat) for cat in category_counts.index]
+    plt.barh(categories, category_counts.values, color="skyblue")
+
+    # sns.barplot(x=category_counts.index, y=category_counts.values, observed=False, color='skyblue', order= category_counts.index)
+
+    # Set plot labels and title
+    plt.ylabel(col_name, rotation=0, labelpad=50)
+    plt.xlabel("%")
+    plt.title(f"Percentage of Occurrences in {col_name}")
+    if len(category_counts) > 20:
+        plt.yticks([])
+
+    # Show the plot
+    plt.tight_layout()
+    plt.savefig(config.PATH_DATA_RESULTS / f"{col_name}_percentage_bar.png")
+    plt.clf()
+
+
+def donut_plot(dataframe, column_name):
+    # Ensure that the column exists in the DataFrame
+    if column_name not in dataframe.columns:
+        raise ValueError(f"Column '{column_name}' not found in the DataFrame.")
+
+    # Count the occurrences of each unique value in the specified column
+    value_counts = dataframe[column_name].value_counts()
+
+    # Plotting
+    fig, ax = plt.subplots()
+    ax.pie(
+        value_counts,
+        labels=value_counts.index,
+        autopct="%1.1f%%",
+        pctdistance=0.5,
+        startangle=90,
+        wedgeprops=dict(width=0.6),
+    )
+    ax.axis("equal")  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+    # Draw a circle in the center to create a donut chart
+    center_circle = plt.Circle((0, 0), 0.70, fc="white")
+    fig = plt.gcf()
+    fig.gca().add_artist(center_circle)
+
+    plt.title(f"{column_name}", loc="center")
+    plt.savefig(config.PATH_DATA_RESULTS / f"{column_name}_donut.png")
+    plt.clf()
+
+
+def histogram_plot(dataframe, column_name, title: str = None, filename: str = None):
+    # Ensure that the column exists in the DataFrame
+    if title is None:
+        title = f"Histogram - {column_name}"
+    if filename is None:
+        filename = f"{column_name}_histogram.png"
+    if column_name not in dataframe.columns:
+        raise ValueError(f"Column '{column_name}' not found in the DataFrame.")
+
+    # Plotting
+    fig, ax = plt.subplots()
+
+    # Plot histogram
+    ax.hist(
+        dataframe[column_name], bins=20
+    )  # You can adjust the number of bins as needed
+    median = dataframe[column_name].median()
+    # plot median in histogram
+    plt.axvline(
+        median,
+        color="r",
+        linestyle="dashed",
+        linewidth=2,
+        label=f"Median: {median:.2f}",
+    )
+
+    # Add labels and title
+    plt.xlabel(column_name)
+    plt.ylabel("Number of Occurrences")
+    plt.title(title)
+    plt.legend(loc="upper left")
+
+    plt.savefig(config.PATH_DATA_RESULTS / filename)
+    plt.clf()
+
+
+def hierarchical_clustering_dendrogram(
+    distance_matrix, method="complete", num_clusters=None, distance_threshold=None
+):
+    """Perform hierarchical clustering, plot the dendrogram, and assign clusters.
+
+    Parameters:
+    - distance_matrix: numpy array or pd.DataFrame, the distance matrix for clustering.
+    - method: str, the linkage algorithm (default is 'complete').
+    - metric: str, the distance metric (default is 'euclidean').
+    - num_clusters: int, the number of clusters to form (if None, use distance_threshold).
+    - distance_threshold: float, the distance threshold for forming flat clusters (if None, use num_clusters).
+
+    Returns:
+    - cluster_labels: numpy array, the assigned cluster labels.
+    """
+    # Convert distance matrix to condensed form if it's a square matrix
+    if isinstance(distance_matrix, np.ndarray):
+        if distance_matrix.shape[0] == distance_matrix.shape[1]:
+            condensed_distance = squareform(distance_matrix)
+        else:
+            condensed_distance = distance_matrix
+    elif isinstance(distance_matrix, pd.DataFrame):
+        condensed_distance = squareform(distance_matrix.to_numpy())
+    else:
+        raise ValueError(
+            "Unsupported distance matrix format. Use numpy array or pandas DataFrame."
+        )
+
+    # Perform hierarchical clustering
+    linkage_matrix = linkage(condensed_distance, method=method)
+
+    # Assign clusters based on num_clusters or distance_threshold
+    if num_clusters is not None:
+        cluster_labels = fcluster(linkage_matrix, num_clusters, criterion="maxclust")
+    elif distance_threshold is not None:
+        cluster_labels = fcluster(
+            linkage_matrix, distance_threshold, criterion="distance"
+        )
+    else:
+        raise ValueError(
+            "Either 'num_clusters' or 'distance_threshold' must be specified."
+        )
+
+    # cluster_colors = {label: plt.cm.nipy_spectral(float(i) / max(cluster_labels)) for i, label
+    #                   in enumerate(set(cluster_labels))}
+
+    # Plot the dendrogram
+    plt.figure(figsize=(40, 10))
+    dendrogram(
+        linkage_matrix, color_threshold=distance_threshold
+    )  # , truncate_mode='lastp', p=100)#, link_color_func=lambda x: cluster_colors[cluster_labels[x - 1]])
+    plt.title("Hierarchical Clustering Dendrogram")
+    plt.xlabel("Data Points")
+    plt.ylabel("Distance")
+
+    plt.xticks([])
+    plt.savefig(config.PATH_DATA_RESULTS / "dendrogram.png")
+    plt.clf()
+    print(f"Number of clusters: {len(set(cluster_labels))}")
+    return cluster_labels
+
+
+def plot_distance_histogram(distance_matrix):
+    """Plot the histogram of distances from the given distance matrix.
+
+    Parameters:
+    - distance_matrix: numpy array, square matrix containing pairwise distances.
+    """
+    # Ensure the distance matrix is square
+    assert (
+        distance_matrix.shape[0] == distance_matrix.shape[1]
+    ), "Distance matrix must be square"
+
+    # Flatten the upper triangle of the distance matrix (excluding the diagonal)
+    distances = distance_matrix[np.triu_indices(distance_matrix.shape[0], k=1)]
+
+    # Plot histogram
+    plt.hist(distances, edgecolor="black", bins=20, density=True)
+    plt.title("Histogram of Gower Distances")
+    plt.xlabel("Distance")
+    plt.ylabel("%", rotation=0, labelpad=20)
+    plt.savefig(config.PATH_DATA_RESULTS / "gower_distance_histogram.png")
+
+
+def analyze_cluster_features(data, labels, categorical_features=[]):
+    """Analyze the features in the dataset based on clustering results.
+
+    Parameters:
+    - data: DataFrame containing the features
+    - labels: Cluster labels assigned by the clustering algorithm
+    - categorical_features: List of column names containing categorical features
+
+    Returns:
+    None (displays plots for analysis)
+    """
+    # Add cluster labels to the DataFrame
+    data["Cluster"] = labels
+
+    # Pairplot with hue for numerical features
+    numerical_features = [
+        col for col in data.columns if col not in categorical_features + ["Cluster"]
+    ]
+    sns.pairplot(data, hue="Cluster", palette="Dark2", vars=numerical_features)
+    plt.tight_layout()
+    plt.show()
+
+    # Boxplot for numerical features with respect to clusters
+    for column in numerical_features:
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(x="Cluster", y=column, data=data, palette="Dark2")
+        plt.title(f"Boxplot of {column} for Clusters")
+        plt.show()
+
+    # Count plot for each categorical feature with respect to clusters
+    for column in categorical_features:
+        if len(data[column].unique()) > 10:
+            continue
+        plt.figure(figsize=(10, 6))
+        sns.countplot(
+            x=column, hue="Cluster", data=data, palette="Dark2", stat="percent"
+        )
+        plt.title(f"Countplot of {column} for Clusters")
+        plt.show()
+
+
+def plot_embedding_with_color(embedding, color_vector, name, target):
+    """Plot a 2D embedding with scatter, where each point's color is determined by a vector.
+
+    Parameters:
+        embedding (numpy.ndarray): 2D embedding array with shape (n_samples, 2).
+        color_vector (numpy.ndarray): 1D vector with length n_samples, can be numerical or categorical.
+    """
+    plt.figure(figsize=(16, 10))
+    # Plot scatter with color based on color_vector
+    if color_vector is not None:
+        categories = np.unique(color_vector)
+        n_categories = len(categories)
+        if n_categories < 20:
+            colormap = plt.cm.get_cmap("viridis", n_categories)
+            for i, category in enumerate(categories):
+                indices = np.where(color_vector == category)
+                plt.scatter(
+                    embedding[indices, 0],
+                    embedding[indices, 1],
+                    label=str(category),
+                    cmap=colormap,
+                    alpha=0.8,
+                )
+            plt.legend(title=target, loc="center left", bbox_to_anchor=(1, 0.5))
+        else:
+            sorted_arrays = sorted(
+                zip(color_vector, embedding[:, 0], embedding[:, 1]), reverse=True
+            )
+            sorted_numerical_array, sorted_embedding_1, sorted_embedding_2 = zip(
+                *sorted_arrays
+            )
+            plt.scatter(
+                sorted_embedding_1,
+                sorted_embedding_2,
+                c=sorted_numerical_array,
+                cmap="PiYG",
+                alpha=0.8,
+            )
+            plt.colorbar(label=target)
+    else:
+        plt.scatter(embedding[:, 0], embedding[:, 1], alpha=0.8)
+    # Add color bar
+    plt.xlabel("Embedding Dimension 1")
+    plt.ylabel("Embedding Dimension 2")
+    plt.title(f"2D {name} embedding")
+    plt.savefig(
+        config.PATH_DATA_RESULTS / f"{name}_embedding_{target}.png", bbox_inches="tight"
+    )
+    plt.tight_layout()
+    plt.clf()
+
+
+# Internal modules
+if __name__ == "__main__":
+    #  BigQuery project and dataset information
+    project_id = config.GCLOUD_PROJECT_ID
+    dataset_id = config.GCLOUD_DATASET_ANALYTICS
+    # 1. Read data
+    bq = BigQueryCRUDBase(
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id="dbt_features_service",
+        schema_df=BaseDFSchemaNoFilter,
+    )
+    df = bq.read().sort_values(by="timestamp")
+    service_id = df["service_id"]
+
+    # 2. Basic cleaning
+    categorical_cols = [
+        "season_of_year",
+        "month_of_year",
+        "day_of_week",
+        "hour_of_day",
+        "driver_id",
+        "operator_id",
+        "route_id",
+    ]
+    numerical_cols = [
+        "perc_pressed_play_driver",
+        "num_past_services_driver",
+    ]
+    target_cols = [
+        "did_service_end_on_time",
+        "did_service_start_on_time",
+        "has_reserved_stops_executed",
+        "is_play_pressed",
+    ]
+    # retrieve indexes of recent rows
+    current_date = datetime.now()
+    start_date_last_month = current_date - pd.DateOffset(months=1)
+    last_month_idx = df[df["timestamp"] >= start_date_last_month].index
+
+    # select features and remove rows with nans
+    df = df[categorical_cols + numerical_cols + target_cols].dropna(
+        subset=categorical_cols
+    )
+    mean_perc_past_play = df["perc_pressed_play_driver"].mean()
+    df["perc_pressed_play_driver"] = df["perc_pressed_play_driver"].fillna(
+        mean_perc_past_play
+    )
+    df["did_service_end_on_time"] = (
+        df["did_service_end_on_time"].astype(str).fillna("na")
+    )
+    df["did_service_start_on_time"] = (
+        df["did_service_start_on_time"].astype(str).fillna("na")
+    )
+    df["has_reserved_stops_executed"] = (
+        df["has_reserved_stops_executed"].astype(str).fillna("na")
+    )
+
+    # set correct data types
+    df[categorical_cols] = df[categorical_cols].astype(object)
+    df[numerical_cols] = df[numerical_cols].astype("float")
+    df[target_cols] = df[target_cols].astype(object)
+    X = df[df.index.isin(last_month_idx)]
+
+    # 3. Basic data analysis
+    print(f"There are {df.shape[0]} samples and {df.shape[1]} features")
+    for col in categorical_cols:
+        plot_percentage_bar(df, col)
+    for col in target_cols:
+        donut_plot(df, col)
+    for col in numerical_cols:
+        histogram_plot(df, col)
+
+    # 4. Dimensionality reduction
+    numeric = df[numerical_cols].copy()
+    scaled_numeric = StandardScaler().fit_transform(numeric)
+    categoric = pd.get_dummies(
+        df[categorical_cols + target_cols].copy(), drop_first=True
+    )
+
+    categoric_mapper = umap.UMAP(metric="dice", n_neighbors=150, random_state=42).fit(
+        categoric.values
+    )
+    categoric_embeding = categoric_mapper.transform(categoric.values)
+    # plot_embedding_with_color(categoric_embeding, df["did_service_end_on_time"].values, 'categoric', 'did_service_end_on_time')
+
+    numeric_mapper = umap.UMAP(n_neighbors=15, random_state=42).fit(scaled_numeric)
+    numeric_embeding = numeric_mapper.transform(scaled_numeric)
+
+    intersection_mapper = numeric_mapper * categoric_mapper
+    intersection_embeding = intersection_mapper.embedding_
+
+    union_mapper = numeric_mapper + categoric_mapper
+    union_embeding = union_mapper.embedding_
+
+    embedings = {
+        "categoric": categoric_embeding,
+        "numeric": numeric_embeding,
+        "intersection": intersection_embeding,
+        "union": union_embeding,
+    }
+    for name, embeding in embedings.items():
+        for target in target_cols:
+            plot_embedding_with_color(embeding, df[target].values, name, target)
+
+    for name, embeding in embedings.items():
+        plot_embedding_with_color(embeding, None, name, "")
+
+    # 5. Clustering
+    dbscan = DBSCAN(eps=2)
+    cluster_labels_dbscan = dbscan.fit_predict(categoric_embeding)
+    print(np.unique(cluster_labels_dbscan, return_counts=True))
+    plot_embedding_with_color(
+        categoric_embeding, cluster_labels_dbscan, "categoric", "clustering"
+    )
+    for col in categorical_cols:
+        plot_embedding_with_color(categoric_embeding, df[col].values, "categoric", col)
+    for col in numerical_cols:
+        plot_embedding_with_color(categoric_embeding, df[col].values, "categoric", col)
+
+    # score visualization
+    scores = crud_scores_service.read()
+    idx = scores.groupby("service_id")["calculated_at_utc"].idxmax()
+    scores_latest = scores.loc[idx]
+
+    df_with_id = df.merge(service_id, left_index=True, right_index=True, how="inner")
+    df_with_scores = df_with_id.merge(scores_latest, on="service_id", how="left")
+
+    plot_embedding_with_color(
+        categoric_embeding,
+        df_with_scores["score_global"].values,
+        "categoric",
+        "score_global",
+    )
+    print(df_with_id)
+    df_with_scores["cluster"] = cluster_labels_dbscan
+
+    for i in df_with_scores.cluster.unique():
+        histogram_plot(
+            df_with_scores[df_with_scores.cluster == i],
+            "score_global",
+            title=f"Cluster {i} score distribution",
+            filename=f"cluster_{i}_score_distribution.png",
+        )
+
+    histogram_plot(
+        df_with_scores,
+        "score_global",
+        title="Score distribution",
+        filename="score_distribution.png",
+    )
+    # 4. Hierarchical clustering
+    # Compute the Gower distance
+    # X = df[df.index.isin(last_month_idx)]
+    # D = gower.gower_matrix(X)
+    # S = 1 - D
+    # plot_distance_histogram(D)
+    #
+    # # Plot the distance matrix
+    # cluster_labels_hierarchical = hierarchical_clustering_dendrogram(
+    #     D, distance_threshold=0.8
+    # )
+    # print(np.unique(cluster_labels_hierarchical, return_counts=True))
+    #
+    # # 5. Kprototypes clustering
+    # categorical_features_idx = [
+    #     X.columns.get_loc(col) for col in categorical_cols + target_cols
+    # ]
+    # kproto = KPrototypes(n_clusters=5, verbose=0, max_iter=100).fit(
+    #     X, categorical=categorical_features_idx
+    # )
+    # cluster_labels_kprototypes = kproto.predict(X, categorical=categorical_features_idx)
+    # print(np.unique(cluster_labels_kprototypes, return_counts=True))
+    #
+    # # 6. DBSCAN clustering
+    # dbscan = DBSCAN(metric="precomputed", eps=0.25, min_samples=2)
+    # cluster_labels_dbscan = dbscan.fit_predict(D)
+    # print(np.unique(cluster_labels_dbscan, return_counts=True))
+
+    # 7. UMAP visualization
+    # clusters = {'hierarchical': cluster_labels_hierarchical, 'kprototypes': cluster_labels_kprototypes, 'dbscan': cluster_labels_dbscan}
+    # for cluster_type, cluster_labels in clusters.items():
+    #     plot_umap(D, cluster_labels)

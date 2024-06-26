@@ -1,0 +1,1246 @@
+BEGIN
+ CREATE OR REPLACE TABLE `brainer-390415.busup.routes` (
+    id INT64 NOT NULL OPTIONS (
+      description="Unique routes identifier"
+    ),
+    province_id INT64 OPTIONS (
+      description="ID of provinces"
+    ),
+    primary_site INT64 OPTIONS (
+      description="Primary site of the Route"
+    ),
+    route_code STRING OPTIONS (
+      description="route code of the route"
+    ),
+    title STRING OPTIONS (
+      description="Title of the route (name)"
+    ),
+    pax INT64 OPTIONS (
+      description="Capacity of the route"
+    ),
+    time INT64 OPTIONS (
+      description="Time of the route (seconds)"
+    ),
+    distance INT64 OPTIONS (
+      description="Distance of the route (meters)"
+    ),
+    status INT64 OPTIONS (
+      description="Status of the route"
+    ),
+    circular BOOL DEFAULT FALSE OPTIONS (
+      description="If the route is circular"
+    ),
+    on_demand BOOL DEFAULT FALSE OPTIONS(
+      description = "If the route is on_demand"
+    ),
+    created DATETIME OPTIONS (
+      description="Timestamp when routes was created"
+    ),
+    modified DATETIME OPTIONS (
+      description="Last timestamp when routes was modified"
+    ),
+    PRIMARY KEY (id) NOT ENFORCED
+  )
+  OPTIONS(
+    description = "Main table used for storing route"
+  );
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.services`(
+    id INT64 NOT NULL OPTIONS (
+      description="Unique services identifier"
+    ),
+    route_id INT64 NOT NULL OPTIONS (
+      description="Route ID"
+    ),
+    track_id INT64 OPTIONS (
+      description="ID of tracks"
+    ),
+    plan_id INT64 OPTIONS (
+      description="ID of the plan (route_schedules)"
+    ),
+    vehicle INT64 OPTIONS (
+      description="ID of vehicles"
+    ),
+    provider INT64 OPTIONS (
+      description="ID of providers"
+    ),
+    timestamp DATETIME OPTIONS (
+      description="Timestamp of the service (only takes into consideration the date, not the hour)"
+    ),
+    arrival_address STRING OPTIONS (
+      description="Arrival address of the service (of the first stop)"
+    ),
+    arrival_timestamp DATETIME OPTIONS (
+      description="Arrival timestamp of the service (to the first stop)"
+    ),
+    departure_address STRING OPTIONS (
+      description="Departure address of the service (of the last stop)"
+    ),
+    departure_timestamp DATETIME OPTIONS (
+      description="Departure timestamp of the service (to the last stop)"
+    ),
+    pax INT64 OPTIONS (
+      description="Capacity of the service assigned"
+    ),
+    reported_departure_timestamp DATETIME OPTIONS (
+      description="Reported departure timestamp"
+    ),
+    reported_arrival_timestamp DATETIME OPTIONS (
+      description="Reported arrival timestamp"
+    ),
+    status INT64 OPTIONS (
+      description="Status of the service"
+    ),
+    status_info JSON OPTIONS (
+      description="Information of the status in json file"
+    ),
+    error_type INT64 OPTIONS(
+      description ="ID of traffic_control_errors"
+    ),
+    error_description STRING OPTIONS(
+      description = "Additional comments to the error"
+    ),
+    return BOOL OPTIONS (
+      description="If the service was return"
+    ),
+    tracking_quality INT64 OPTIONS(
+      description = "Assings a quality to the tracking of a service according to the number of tracking points expected: 0 - bad; 1 - medium: 2- high"
+    ),
+    tracking_lost BOOL OPTIONS(
+      description = "Indicates if there has been a several tracking lost throughout the service, more specificly if exists a jump of time where there was no tracking and the bus travelled a ceratain distance"
+    ),
+    created DATETIME OPTIONS (
+      description="Timestamp when a service was created"
+    ),
+    modified DATETIME OPTIONS (
+      description="Last timestamp when a service was modified"
+    ),
+    with_incidents BOOL DEFAULT FALSE OPTIONS (
+      description="A manual checkbox that allows to mark a service that suffered incidents"
+    ),
+    incident_code_id INT64 OPTIONS(
+      description = "ID of traffic_control_errors "
+    ),
+    PRIMARY KEY (id) NOT ENFORCED,
+  )
+  PARTITION BY DATE(timestamp)
+  OPTIONS(
+    description = "Main table storing services"
+  );
+
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.sites_routes`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique sites_routes identifier"
+  ),
+  site_id INT64 NOT NULL OPTIONS (
+    description="Site ID"
+  ),
+  route_id INT64 OPTIONS (
+    description="Route ID"
+  ),
+  primary BOOL OPTIONS (
+    description="If 1 site is primary to the route; 0 otherwise"
+  ),
+  publish DATETIME OPTIONS (
+    description="Timestamp of when was published"
+  ),
+  return BOOL OPTIONS (
+    description="0 if the route is on-going; 1 otherwise"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description="Datetime of when the sites_routes entrance was deleted"),
+  PRIMARY KEY (id) NOT ENFORCED
+)OPTIONS(
+  description = "Auxiliar table that linkes routes with sites determining additional data"
+);
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.provinces`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique provinces identifier"
+  ),
+  country_id INT64 NOT NULL OPTIONS (
+    description="Country ID"
+  ),
+  code STRING OPTIONS (
+    description="Province code"
+  ),
+  name STRING OPTIONS (
+    description="Name of the province"
+  ),
+  base_latitude FLOAT64 OPTIONS (
+    description="Latitude of the Province"
+  ),
+  base_longitude FLOAT64 OPTIONS (
+    description="Longitude of the Province"
+  ),
+  timezone STRING OPTIONS (
+    description="Timezone where the province is located"),
+  PRIMARY KEY (id) NOT ENFORCED
+)OPTIONS(
+  description = "Table that stores all the provinces available"
+);
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.countries`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique country identifier"
+  ),
+  name STRING NOT NULL OPTIONS (
+    description="Country name"),
+  is_available BOOL NOT NULL OPTIONS (
+    description = "1 if is available, 0 if not"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that stores countries"
+  );
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.avantgrup_stop`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique avantgrup_stop identifier"
+  ),
+  name STRING OPTIONS (
+    description="Name of the stop"
+  ),
+  lat_wgs84 FLOAT64 OPTIONS (
+    description="Latitude in wgs84"
+  ),
+  lng_wgs84 FLOAT64 OPTIONS (
+    description="Longitude in wgs84"
+  ),
+  lat_mct FLOAT64 OPTIONS (
+    description="Latitude in mct"
+  ),
+  lng_mct FLOAT64 OPTIONS (
+    description="Longitude in mct"
+  ),
+  status STRING OPTIONS (
+    description="P if pending, V if validated"),
+  date_creation DATETIME OPTIONS (
+    description="Timezone where the province is located"),
+  date_last_modification DATETIME OPTIONS (
+    description="Datetime of when the stop was created."),
+  address STRING OPTIONS (
+    description="Timezone where the province is located"),
+  province_id INT64 OPTIONS (
+    description="Timezone where the province is located"),
+  door_to_door BOOL OPTIONS (
+    description="Timezone where the province is located"),
+  PRIMARY KEY (id) NOT ENFORCED
+)
+OPTIONS(
+  description = "Main table that stores all possible stops available."
+);
+
+ CREATE OR REPLACE TABLE `brainer-390415.busup.route_stops`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique route_stops identifier"
+  ),
+  ag_stop STRING OPTIONS(
+    description = "ID of avantgrup_stops"
+  ),
+  route_id INT64 OPTIONS (
+    description="Id of routes.id"
+  ),
+  stop_type_id INT64 OPTIONS (
+    description="Stop type: 1-pickup; 2: stop pickup; 3: destiny; 4: return; 5 stop return; 6: origin return; 7: destiny return; 100: base"
+  ),
+  province_id INT64 OPTIONS (
+    description="ID of provinces"
+  ),
+  requested_address STRING OPTIONS (
+    description="Field that stores the address of the stop, only used in old stops."
+  ),
+  known_title STRING OPTIONS (
+    description="Known title represents the address of the stop."
+  ),
+  title STRING OPTIONS (
+    description="Title of the stop representing the alias"),
+  description STRING OPTIONS (
+    description="Stop’s description"),
+  notes STRING OPTIONS (
+    description="Additional information about the stop i.e: next to the police station"),
+  start_timestamp DATETIME OPTIONS (
+    description="Start time of the stop (when the bus arrives)"),
+  end_timestamp DATETIME OPTIONS (
+    description="End time of the stop (when the bus leaves)"),
+  lat FLOAT64 OPTIONS (
+    description="Latitude of the stop"),
+  lng FLOAT64 OPTIONS (
+    description="Longitude of the stop"),
+  created DATETIME OPTIONS (
+    description="Timestamp when route_stops was created"),
+  modified DATETIME OPTIONS (
+  description="Last timestamp when route_stops was modified"),
+  PRIMARY KEY (id) NOT ENFORCED
+)
+OPTIONS(
+  description = "Table that stores the stops of a route (clonning the information of the stop from avantgrup_stops)"
+);
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.traffic_control_errors`(
+    id INT64 OPTIONS (
+      description="Unique traffic_control_errors identifier."
+    ),
+    message STRING OPTIONS (
+      description="Explanaiton of the error."
+    ),
+    translation STRING OPTIONS (
+      description="String code associated with the error"
+    ),
+    created DATETIME OPTIONS (
+      description="Timestamp when a traffic error was created"
+    ),
+    PRIMARY KEY (id) NOT ENFORCED,
+  )
+  OPTIONS(
+    description = "TAble that stores the different types of errors a service can have"
+  );
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.traffic_control_incidents`(
+    id INT64 OPTIONS (
+      description="Unique traffic_control_incidents identifier."
+    ),
+    message STRING OPTIONS (
+      description="Explanaiton of the incident."
+    ),
+    translation STRING OPTIONS (
+      description="String code associated with the incident"
+    ),
+    created DATETIME OPTIONS (
+      description="Timestamp when a traffic error was created"
+    ),
+    PRIMARY KEY (id) NOT ENFORCED,
+  )
+  OPTIONS(
+    description = "TAble that stores the different types of incidents a service can have"
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.route_track_points`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique track_point identifier"
+  ),
+  route_id INT64 NOT NULL OPTIONS (
+    description="Route ID"
+  ),
+  track_id INT64 OPTIONS (
+    description="Track ID"
+  ),
+  route_stop_id INT64 OPTIONS (
+    description="ID of route_stops;every stop is associated to a trackpoint"
+  ),
+  lat FLOAT64 OPTIONS (
+    description="Latitude of the Province"
+  ),
+  lng FLOAT64 OPTIONS (
+    description="Longitude of the Province"
+  ),
+  segment INT64 OPTIONS (
+    description="Segment of the trackpoint; segment 1 means that the trackpoint belongs to the path that goes from stop 1 to stop 2"),
+  created DATETIME OPTIONS (
+    description="Datetime when the trackpoint was created"),
+  modified DATETIME OPTIONS (
+    description="Datetime when the trackpoint was lastly modified"),
+  PRIMARY KEY (id) NOT ENFORCED
+)
+CLUSTER BY route_id, track_id
+OPTIONS(
+  description = "Table that stores the track points of a route, meaning the theoretical path of it"
+);
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.tracks`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique tracks identifier"
+  ),
+  route_id INT64 NOT NULL OPTIONS (
+    description="Route ID"
+  ),
+  name STRING OPTIONS (
+    description="Name associated to the track"
+  ),
+  time TIME OPTIONS (
+    description="Time of the day when the track is executed"
+  ),
+  created_at DATETIME OPTIONS (
+    description="Date and hour of registry"
+  ),
+  updated_at DATETIME OPTIONS (
+    description="Date and hour when the track was lastly modified."
+  ),
+  deleted_at DATETIME OPTIONS (
+    description="Date and hour when the track was deleted."
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that represents a route configuration with configurable stops and time"
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.track_stops`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique provinces identifier"
+  ),
+  track_id INT64 NOT NULL OPTIONS (
+    description="Track ID associated"
+  ),
+  stop_id INT64 OPTIONS (
+    description="Foreing key for the busup.route_stops.id."
+  ),
+  ag_stop INT64 OPTIONS(
+    description = "ID of avantgrup stops"
+  ),
+  stop_type_id INT64 OPTIONS (
+    description="Stop type: 1-pickup; 2: stop pickup; 3: destiny; 4: return; 5 stop return; 6: origin return; 7: destiny return; 100: base"
+  ),
+  province_id INT64 OPTIONS (
+    description="ID of the Province associated"
+  ),
+  name STRING OPTIONS (
+    description="Nom of the stop. Equivalent to busup.route_stops.title + <FULLWIDTH COMMA 0xFF0C> + busup.route_stops.known_title"
+  ),
+  passenger_notice STRING OPTIONS (
+    description="Short message to the passengers.Equivalent to busup.route_stops.notes."),
+  lat FLOAT64 OPTIONS (
+    description="Latitude of the stop"),
+  lng FLOAT64 OPTIONS (
+    description="Longitude of the stop"),
+  time TIME OPTIONS (
+    description="Hour of the stop indicated to the passengers of the route."),
+  seconds_until_arrival INT64 OPTIONS (
+    description="Seconds since the start of the route that is estimated to pass until arriving to the stop arrival."),
+  seconds_until_departure INT64 OPTIONS (
+    description="Seconds since the start of the route that is estimated to pass until arriving to the stop departure."),
+  PRIMARY KEY (id) NOT ENFORCED
+)OPTIONS(
+  description = 'Table that represents the subset of stops of a specific track'
+);
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.promoters`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique promoter identifier"
+  ),
+  name STRING OPTIONS (
+    description="Name of the promoter"),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when was updated"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when was created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "The promoter entity works as an agrupation of sites, this table stores the information of these accordingly."
+  );
+
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.sites`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique site identifier"
+  ),
+  name STRING NOT NULL OPTIONS (
+    description="Site name"),
+  country_id INT64 OPTIONS (
+    description = "Country id"
+  ),
+  promoter_id INT64 OPTIONS (
+    description = "If of the promoter"
+  ),
+  shape STRING OPTIONS (
+    description = "Latitud, longitude,… of the site zone"
+  ),
+  site_status INT64 OPTIONS (
+    description = "0 if DEMO, 1 if ACTIVE and 2 if INACTIVE"
+  ),
+  site_crosselling BOOL OPTIONS (
+    description = "True if  the site we want to do does cross-selling"
+  ),
+  site_type INT64 OPTIONS (
+    description = "0  if the site is a BusUp site. 1 if the site is a SaaS site."
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the sites has been lastly modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the sites has been created"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description = "Datetime when the sites has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that stores all the sites."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.calendar`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique calendar identifier"
+  ),
+  name STRING OPTIONS (
+    description="Name given to the calendar"),
+  country_id INT64 NOT NULL OPTIONS (
+    description = "Country ID of the calendar"),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains the master information about calendars."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.calendar_days`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique calendar day identifier"
+  ),
+  calendar_id INT64 OPTIONS (
+    description="Site name"),
+  day DATE OPTIONS (
+    description = "Day that is disabled in the calendar"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the calendar day was lastly modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the calendar day was created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS( 
+    description = "Table that contains the information of the availability of each day related to a specific calendar."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.companies`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique company identifier"
+  ),
+  name STRING OPTIONS (
+    description="Company name"),
+  site_id INT64 OPTIONS (
+    description = "ID of sites"
+  ),
+  lat FLOAT64 OPTIONS (
+    description = "Latitude where the company is located"
+  ),
+  lng FLOAT64 OPTIONS (
+    description = "Longitude where the company is located"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the company has been lastly modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the company has been created"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description = "Datetime when the company has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains information regarding the companies."
+  );
+  
+CREATE OR REPLACE TABLE `brainer-390415.busup.employees`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique employee identifier"
+  ),
+  company_id INT64 NOT NULL OPTIONS (
+    description="Company id that user is linked to"),
+  user_id INT64 NOT NULL OPTIONS (
+    description = "ID of users"
+  ),
+  status INT64 OPTIONS (
+    description = "0 confirmed; 1 pending; 2 cancelled"
+  ),
+  position STRING OPTIONS (
+    description = "Position inside the company"
+  ),
+  number_worker STRING OPTIONS (
+    description = "Worker number of the employee"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the employee has been created"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the employee has been deleted"
+  ),
+  date_canceled DATETIME OPTIONS (
+    description = "Datetime when the employee has been canceled"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description = "Datetime when the employee has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table representing the relation between a user and a company."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.users`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique user identifier"
+  ),
+  first_name STRING OPTIONS (
+    description="First name"),
+  last_name STRING OPTIONS (
+    description = "Last name"
+  ),
+  address STRING OPTIONS (
+    description = "Address of the user"
+  ),
+  address_latitude FLOAT64 OPTIONS (
+    description = "Latitude of the address of the user"
+  ),
+  address_longitude FLOAT64 OPTIONS (
+    description = "Longitude of the address of the user"
+  ),
+  email STRING OPTIONS (
+    description = "Email of the user"
+  ),
+  last_online DATETIME OPTIONS (
+    description = "Datetime when the user has been lastly online"
+  ),
+  status INT64 OPTIONS (
+    description = "-1 undefined, 1 pending verification, 2 verified"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the user has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the user has been modified"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description = "Datetime when the user has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Main table for users."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.ontime`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique ontime identifier"
+  ),
+  service_id INT64 OPTIONS (
+    description="Service ID"),
+  mode STRING OPTIONS (
+    description = "Track or Route"
+  ),
+  stop_id INT64 OPTIONS (
+    description = "ID of stops"
+  ),
+  arrivaltime DATETIME OPTIONS (
+    description = "Datetime when the bus reached the stop"
+  ),
+  departuretime DATETIME OPTIONS (
+    description = "Datetime when the bus left the stop"
+  ),
+  status STRING OPTIONS (
+    description = "Status of the stop: found, not found GPS near 80 meters, not found GPS near 160 meters"
+  ),
+  bypassed BOOL OPTIONS (
+    description = "Bypass is true if the bus did not stay at the stop"
+  ),
+  arrivallat STRING OPTIONS (
+    description = "Lat where the bus arrived at the stop"
+  ),
+  arrivallng STRING OPTIONS (
+    description = "Lng where the bus arrived the stop"
+  ),
+  arrivaldistance STRING OPTIONS (
+    description = "Distance between the stop and the arrival point"
+  ),
+  departurelat STRING OPTIONS (
+    description = "Lat where the bus left the stop"
+  ),
+  departurelng STRING OPTIONS (
+    description = "Lng where the bus left the stop"
+  ),
+  departuredistance STRING OPTIONS (
+    description = "Distance between the stop and the departure point"
+  ),
+  stop_arrival_hour TIME OPTIONS(
+    description = "Theoretical stop arrival hour for the stop"
+  ),
+  stop_departure_hour TIME OPTIONS(
+    description = "Theoretical stop departure hour for the stop"
+  ),
+  stop_address STRING options(
+    description = "Address of the stop"
+  ),
+  stop_title STRING OPTIONS(
+    description  ="Title of the stop"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the ontime registry has been created"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the ontime registry has been updated"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  CLUSTER BY (service_id)
+  OPTIONS(
+    description = "The table ontime stores the outputs of the algorithm. This algorithm calculates for each stop of a service when did the bus pass and if it stopped there."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.tracking`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique tracking identifier"
+  ),
+  service_id INT64 OPTIONS (
+    description="Service ID"),
+  driver_id INT64 OPTIONS (
+    description = "Driver ID"
+  ),
+  vehicle_id INT64 OPTIONS (
+    description = "Vehicle ID"
+  ),
+  lat FLOAT64 OPTIONS (
+    description = "Lat of the tracking associated"
+  ),
+  lng FLOAT64 OPTIONS (
+    description = "Lng of the tracking associated"
+  ),
+  timestamp DATETIME OPTIONS (
+    description = "Datetime of the tracking reported"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the tracking registry has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  CLUSTER BY service_id
+  OPTIONS(
+    description = "Table that contains the reported tracking for a service."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.drivers`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique driver identifier"
+  ),
+  provider_id INT64 OPTIONS (
+    description="Provider ID"),
+  name STRING OPTIONS (
+    description = "Name of the driver"
+  ),
+  first_name STRING OPTIONS(
+    description  = "First name of the driver"
+  ),
+  phone STRING OPTIONS (
+    description = "Phone of the driver"
+  ),
+  active BOOL OPTIONS (
+    description = "1 if the driver is active"
+  ),
+  driving_licence STRING OPTIONS (
+    description = "Driving licence of the driver"
+  ),
+  date_validity_licence DATETIME OPTIONS (
+    description = "Datetime when the driving licence expires"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the driver registry has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the driver registry has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains driver information."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.providers`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique provider identifier"
+  ),
+  comercial_name STRING OPTIONS (
+    description="Name of the provider"),
+  direction_provider STRING OPTIONS (
+    description = "Address of the provider"
+  ),
+  country INT64 OPTIONS (
+    description = "Country ID"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the provider has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the provider has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains information about the providers"
+  );
+
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.vehicles`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique provider identifier"
+  ),
+  provider_id INT64 OPTIONS (
+    description="ID of provider"),
+  plate_number STRING OPTIONS (
+    description = "Plate number"
+  ),
+  date_plate DATETIME OPTIONS (
+    description = "Registration date plate"
+  ),
+  number STRING OPTIONS (
+    description = "Vehicle company number / name"
+  ),
+  expiration_itv DATETIME OPTIONS (
+    description = "Timestamp when ITV expires. Only used in SPAIN"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the vehicle has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the vehicle has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains the vehicles."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.route_vehicles`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique route_vehicles identifier"
+  ),
+  route_id INT64 OPTIONS (
+    description="ID of route"),
+  bus_type_id INT64 OPTIONS (
+    description = "ID of bus_type"
+  ),
+  pax INT64 OPTIONS (
+    description = "Total capacity of the bus"
+  ),
+  car_identifier STRING OPTIONS (
+    description = "Car identifier"
+  ),
+  plate_number STRING OPTIONS (
+    description = "Plate number of the bus"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the route_vehicle has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the route_vehicle has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "This table specifies the vehicles typology that are assigned to a route."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.bus_type`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique provider identifier"
+  ),
+  name STRING OPTIONS (
+    description="Name of the bus type"),
+  pax INT64 OPTIONS (
+    description = "Capacity of the bus"
+  ),
+  width FLOAT64 OPTIONS (
+    description = "Width of the bus"
+  ),
+  height FLOAT64 OPTIONS (
+    description = "Height of the bus"
+  ),
+  longitude FLOAT64 OPTIONS (
+    description = "Longitude of the bus"
+  ),
+  weight FLOAT64 OPTIONS (
+    description = "Weight of the bus"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the bus_typw has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the bus_type has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that specifies the type class of a bus"
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.service_assignation`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique service_assignation identifier"
+  ),
+  provider INT64 OPTIONS (
+    description="ID of provider"),
+  vehicle INT64 OPTIONS (
+    description = "ID of vehicles"
+  ),
+  driver INT64 OPTIONS (
+    description = "ID of drivers"
+  ),
+  service_id INT64 OPTIONS (
+    description = "ID of service"
+  ),
+  status INT64 OPTIONS (
+    description = "Status of the service_assignation"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the service assignation has been created"
+  ),
+  modified DATETIME OPTIONS (
+    description = "Datetime when the service assignation has been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that contains the assignation of vehicle and driver to a service that a provider does."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.passenger_list`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique passenger_list ID"
+  ),
+  service_id INT64 OPTIONS (
+    description="ID of service"),
+  booking_id INT64 OPTIONS (
+    description = "ID of bookings"
+  ),
+  route_stop_id INT64 OPTIONS (
+    description = "ID of route_stop for the origin stop."
+  ),
+  route_stop_destination_id INT64 OPTIONS(
+    description = "ID of route_stop for the destination stop."
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that stores all the bookings that are done for a service and a stop."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.route_config`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique route_config ID"
+  ),
+  route_id INT64 OPTIONS (
+    description="ID of routes"),
+  calendar_id INT64 OPTIONS (
+    description = "ID of calendar"
+  ),
+  vinculation_route STRING OPTIONS (
+    description = "Route code of the linked route [OUTBOUND -> RETURN]"
+  ),
+  date_init DATETIME OPTIONS (
+    description = "Datetime of the start of the route configuration"
+  ),
+  date_finish DATETIME OPTIONS (
+    description = "Datetime of the end of the route configuration"
+  ),
+  mon BOOL OPTIONS (
+    description = "If it is active on mondays"
+  ),
+  tue BOOL OPTIONS (
+    description = "If it is active on tuesdays"
+  ),
+  wed BOOL OPTIONS (
+    description = "If it is active on wednesdays"
+  ),
+  thu BOOL OPTIONS (
+    description = "If it is active on thursdays"
+  ),
+  fri BOOL OPTIONS (
+    description = "If it is active on fridays"
+  ),
+  sat BOOL OPTIONS (
+    description = "If it is active on saturdays"
+  ),
+  sun BOOL OPTIONS (
+    description = "If it is active on sundays"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the route configuration has been modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the route configuration has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that is the result of joining commuting_routes_data where additional information about a route is presented."
+  );
+
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.route_plannings`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique route_plannings ID"
+  ),
+  route_id INT64 OPTIONS (
+    description="ID of routes"),
+  track_id INT64 OPTIONS (
+    description = "ID of calendar"
+  ),
+  pax INT64 OPTIONS (
+    description = "Pax assigned to the schedule"
+  ),
+  start_date DATETIME OPTIONS (
+    description = "Datetime of the start of the route schedule"
+  ),
+  end_date DATETIME OPTIONS (
+    description = "Datetime of the end of the route schedule"
+  ),
+  mon BOOL OPTIONS (
+    description = "If it is active on mondays"
+  ),
+  tue BOOL OPTIONS (
+    description = "If it is active on tuesdays"
+  ),
+  wed BOOL OPTIONS (
+    description = "If it is active on wednesdays"
+  ),
+  thu BOOL OPTIONS (
+    description = "If it is active on thursdays"
+  ),
+  fri BOOL OPTIONS (
+    description = "If it is active on fridays"
+  ),
+  sat BOOL OPTIONS (
+    description = "If it is active on saturdays"
+  ),
+  sun BOOL OPTIONS (
+    description = "If it is active on sundays"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the route planning has been modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the route planning has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that stores the planning that are made for a route."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.route_rates`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique route rates ID"
+  ),
+  route_id INT64 OPTIONS (
+    description="ID of routes"),
+  type_rate INT64 OPTIONS (
+    description = "1- Normal; 2- Promotion; 3 - Flexible"
+  ),
+  period_rate_id INT64 OPTIONS (
+    description = "ID of the period rate"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the route rate has been modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the route rate has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = " Routes_rates is used to define the period rates available for each route and further information."
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.period_rates`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique period rate ID"
+  ),
+  name STRING OPTIONS (
+    description="Name given to the period rate"),
+  natural_days INT64 OPTIONS (
+    description = "Effective days of the period rate"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the period rate has been modified"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the period rate has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Auxiliar table which stores the different periods that we have for our rates."
+   );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.bookings`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique period rate ID"
+  ),
+  user_id INT64 OPTIONS (
+    description="ID of user"),
+  route_id INT64 OPTIONS (
+    description = "ID of route"
+  ),
+  route_rate INT64 OPTIONS (
+    description = "ID of route rates"
+  ),
+  route_stop_id INT64 OPTIONS(
+    description = "ID of route_stop where the reservation has been made for departure stop"
+  ),
+  route_stop_destination_id INT64 OPTIONS(
+    description = "ID of route_stop where the reservation has been made for arrival stop"
+  ),
+  start_timestamp DATETIME OPTIONS (
+    description = "Datetime when the booking starts"
+  ),
+  end_timestamp DATETIME OPTIONS (
+    description="Datetime when the booking ends"),
+  ,
+  financiation BOOL OPTIONS (
+    description = "1 if financiation is available"
+  ),
+  accept_financiation BOOL OPTIONS (
+    description = "1 if financiation is accepted"
+  ),
+  status INT64 OPTIONS (
+    description = "10 active, 20 expired, -10 cancelled"
+  ),
+  price INT64 OPTIONS (
+    description = "Price of the ticket"
+  ),
+  credits FLOAT64 OPTIONS (
+    description = "Credits of the ticket"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the booking has been created"
+  ),
+  modified_at DATETIME OPTIONS (
+    description = "Datetime when the booking been modified"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "This table is the result of merging user_plans and route_rate_user_plans. It represents the booking that a user has made for a specific route"
+  );
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.ticket_consumptions`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique ticket consumption ID"
+  ),
+  booking_id INT64 OPTIONS (
+    description = "ID of bookings"
+  ),
+  service_id INT64 OPTIONS (
+    description = "ID of service"
+  ),
+  timestamp DATETIME OPTIONS (
+    description = "Datetime when the ticket consumption was realized"
+  ),
+  error BOOL OPTIONS (
+    description="1 if error in the ticket consumption"),
+  message STRING OPTIONS (
+    description = "Message associated to the ticket consumption error"
+  ),
+  lat FLOAT64 OPTIONS (
+    description = "Latitude where the ticket consumption was made"
+  ),  
+  lng FLOAT64 OPTIONS (
+    description="Longitude where the ticket consumption was made"),
+  route_stop_id INT64 OPTIONS (
+    description = "ID of the closest stop to the localization where the ticket consumption was made"
+  ),
+  distance_route_stop FLOAT64 OPTIONS (
+    description = "Distance to the closest stop"
+  ),
+  created DATETIME OPTIONS (
+    description = "Datetime when the ticket_consumption has been created"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "Table that stores all the consumptions that has been realized"
+  );
+  
+  CREATE OR REPLACE TABLE `brainer-390415.busup.traffic_control_incidents`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique traffic_control_incident ID"
+  ),
+  service_id INT64 OPTIONS (
+    description = "ID of service"
+  ),
+  traffic_control_incident_code INT64 OPTIONS (
+    description = "ID of traffic_control_incidents_code that determines the incident"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the traffic_control_incident has been created"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the traffic_control_incident has been modified"
+  ),
+  deleted_at DATETIME OPTIONS (
+    description = "Datetime when the traffic_control_incident has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "This table stores all the incidents that occurs in a determined service."
+  );
+
+
+CREATE OR REPLACE TABLE `brainer-390415.busup.traffic_control_incidents_codes`(
+  id INT64 NOT NULL OPTIONS (
+    description="Unique traffic_control_incident_code ID"
+  ),
+  message STRING OPTIONS (
+    description = "Explanaiton of the message"
+  ),
+  translation STRING OPTIONS (
+    description = "Translation of the incident"
+  ),
+  type STRING OPTIONS (
+    description = "Type of the incident"
+  ),
+  created_at DATETIME OPTIONS (
+    description = "Datetime when the traffic_control_incident_code has been created"
+  ),
+  updated_at DATETIME OPTIONS (
+    description = "Datetime when the traffic_control_incident_code has been modified"
+  ),
+  deleted_at DATETIME OPTIONS(
+     description = "Datetime when the traffic_control_incident_code has been deleted"
+  ),
+  PRIMARY KEY(id) NOT ENFORCED)
+  OPTIONS(
+    description = "This table stores all the incidents codes."
+  );
+
+    CREATE OR REPLACE TABLE `brainer-390415.busup.brainer_recommendations_applied`(
+    id INT64 OPTIONS (
+      description="Unique brainer_recommendation_applied identifier."
+    ),
+    service_id INT64 OPTIONS (
+      description="Service id related."
+    ),
+    applied_codes STRING OPTIONS (
+      description="Applied_clodes"
+    ),
+    created_at DATETIME OPTIONS (
+      description="Timestamp when a brainer_recommendation_applied was created"
+    ),
+    modified_at DATETIME OPTIONS (
+      description="Timestamp when a brainer_recommendation_applied was modified"
+    ),
+    PRIMARY KEY (id) NOT ENFORCED,
+  )
+  OPTIONS(
+    description = "Table that stores the different recommendations"
+  );
+
+
+  CREATE OR REPLACE TABLE `brainer-390415.busup.brainer_recommendations_config`(
+    id INT64 OPTIONS (
+      description="Unique brainer_recommendation_config identifier."
+    ),
+    code STRING OPTIONS (
+      description="code"
+    ),
+    shap_value STRING OPTIONS (
+      description="shap value"
+    ),
+    translation_en STRING OPTIONS (
+      description="translation_en"
+    ),
+    translation_es STRING OPTIONS (
+      description="translation_es"
+    ),
+    translation_cat STRING OPTIONS (
+      description="translation_cat"
+    ),
+    translation_pt STRING OPTIONS (
+      description="translation_pt"
+    ),
+    translation_pt_br STRING OPTIONS (
+      description="translation_pt_br"
+    ),
+    PRIMARY KEY (id) NOT ENFORCED,
+  )
+  OPTIONS(
+    description = "Table that stores the different recommendations config"
+  );
+
+
+  
+
+
+  END

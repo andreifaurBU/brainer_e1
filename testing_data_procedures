@@ -1,0 +1,264 @@
+WITH service_grouped_incidents AS (
+SELECT
+    service_id,
+    array_to_string(array_agg(distinct CAST(tci.traffic_control_incident_code as string)), ',') AS traffic_control_incident_code,
+    array_to_string(array_agg(distinct tcic.message), ',') AS incident_message,
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+GROUP BY
+    service_id
+)
+
+SELECT 
+    FORMAT_TIMESTAMP('%Y-%m', s.timestamp) AS year_month,
+    COUNT(*) AS count_per_month
+FROM 
+    `brainer-390415.busup.ontime` o
+JOIN 
+    `brainer-390415.busup.services` s ON s.id = o.service_id
+INNER JOIN `brainer-390415`.`busup`.`routes` AS routes ON routes.id = s.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+INNER JOIN `brainer-390415`.`busup`.`countries` AS countries ON countries.id = sites.country_id
+LEFT JOIN service_grouped_incidents AS sgi ON s.id = sgi.service_id
+WHERE 
+    s.timestamp >= '2023-05-15 00:00:00'
+    AND routes.circular IS FALSE
+    AND s.timestamp <= '2023-12-31 00:00:00' 
+    AND s.status IN (40,-50)
+    AND(
+    sites.country_id = 73
+    )
+    AND (
+        sgi.traffic_control_incident_code IS NULL
+        OR sgi.traffic_control_incident_code NOT LIKE '%11%'
+    )
+GROUP BY 
+    year_month
+ORDER BY 
+    year_month;
+
+
+WITH service_grouped_incidents AS (
+SELECT
+    service_id,
+    array_to_string(array_agg(distinct CAST(tci.traffic_control_incident_code as string)), ',') AS traffic_control_incident_code,
+    array_to_string(array_agg(distinct tcic.message), ',') AS incident_message,
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+GROUP BY
+    service_id
+)
+
+SELECT 
+    FORMAT_TIMESTAMP('%Y-%m', s.timestamp) AS year_month,
+    COUNT(*) AS count_per_month
+FROM 
+    `nikos_dribia.dbt_ontime` o
+JOIN 
+    `brainer-390415.busup.services` s ON s.id = o.service_id
+INNER JOIN `brainer-390415`.`busup`.`routes` AS routes ON routes.id = s.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+INNER JOIN `brainer-390415`.`busup`.`countries` AS countries ON countries.id = sites.country_id
+LEFT JOIN service_grouped_incidents AS sgi ON s.id = sgi.service_id
+WHERE 
+    s.timestamp >= '2023-05-15 00:00:00'
+    AND routes.circular IS FALSE
+    AND s.timestamp <= '2023-12-31 00:00:00' 
+    AND s.status IN (40,-50)
+    AND(
+    sites.country_id = 73
+    )
+    AND (
+        sgi.traffic_control_incident_code IS NULL
+        OR sgi.traffic_control_incident_code NOT LIKE '%11%'
+    )
+GROUP BY 
+    year_month
+ORDER BY 
+    year_month;
+
+
+
+
+
+WITH service_grouped_incidents AS (
+SELECT
+    service_id,
+    array_to_string(array_agg(distinct CAST(tci.traffic_control_incident_code as string)), ',') AS traffic_control_incident_code,
+    array_to_string(array_agg(distinct tcic.message), ',') AS incident_message,
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+GROUP BY
+    service_id
+)
+SELECT 
+    FORMAT_TIMESTAMP('%Y-%m', s.timestamp) AS y_month,
+    COUNT(CASE WHEN stop_arrival_hour IS NULL THEN 1 END) AS count_null_stop_arrival_hour,
+    COUNT(CASE WHEN stop_departure_hour IS NULL THEN 1 END) AS count_null_stop_departure_hour,
+    COUNT(CASE WHEN arrivaltime IS NULL THEN 1 END) AS count_null_arrivaltime,
+    COUNT(CASE WHEN departuretime IS NULL THEN 1 END) AS count_null_departuretime,
+    COUNT(*) as total
+FROM 
+  `busup.ontime` o
+JOIN 
+    `busup.services` s ON s.id = o.service_id
+INNER JOIN `brainer-390415`.`busup`.`routes` AS routes ON routes.id = s.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+INNER JOIN `brainer-390415`.`busup`.`countries` AS countries ON countries.id = sites.country_id 
+WHERE 
+    s.timestamp >= '2023-01-01 00:00:00' 
+    AND s.timestamp <= '2023-11-30 00:00:00' 
+    AND s.status IN (40,-50)
+    AND(
+    sites.country_id = 73
+    )
+GROUP BY 
+    y_month
+ORDER BY 
+    y_month;
+
+
+
+
+WITH service_to_exclude_due_to_incident AS (
+SELECT
+    service_id
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+    AND tci.traffic_control_incident_code = 11
+)
+
+select count(*) from `brainer-390415`.`busup`.`ticket_consumptions` as tc
+JOIN `brainer-390415`.`busup`.`services` as ser ON  tc.service_id = ser.id
+INNER JOIN `brainer-390415`.`busup`.`routes` as routes ON routes.id = ser.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+WHERE
+    ser.timestamp >= "2023-05-15"
+    AND routes.circular IS FALSE
+    AND(
+    ser.status = 40
+    OR
+    
+    ser.status = -50
+    
+    
+    )
+    AND(
+    sites.country_id = 73
+    
+    
+    )
+    AND ser.id NOT IN (SELECT * FROM service_to_exclude_due_to_incident);
+
+
+WITH service_grouped_incidents AS (
+SELECT
+    service_id,
+    array_to_string(array_agg(distinct CAST(tci.traffic_control_incident_code as string)), ',') AS traffic_control_incident_code,
+    array_to_string(array_agg(distinct tcic.message), ',') AS incident_message,
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+GROUP BY
+    service_id
+)
+
+
+SELECT 
+    FORMAT_TIMESTAMP('%Y-%m', s.timestamp) AS year_month,
+    COUNT(*) AS count_per_month
+FROM 
+    `brainer-390415.busup.services` s
+INNER JOIN `brainer-390415`.`busup`.`routes` AS routes ON routes.id = s.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+INNER JOIN `brainer-390415`.`busup`.`countries` AS countries ON countries.id = sites.country_id
+LEFT JOIN service_grouped_incidents AS sgi ON s.id = sgi.service_id
+WHERE 
+    s.timestamp >= '2023-05-15 00:00:00'
+    AND routes.circular IS FALSE
+    AND s.timestamp <= '2023-11-30 00:00:00' 
+    AND s.status IN (40,-50)
+    AND(
+    sites.country_id = 73
+    )
+    AND (
+        sgi.traffic_control_incident_code IS NULL
+        OR sgi.traffic_control_incident_code NOT LIKE '%11%'
+    )
+GROUP BY 
+    year_month
+ORDER BY 
+    year_month;
+
+
+WITH service_grouped_incidents AS (
+SELECT
+    service_id,
+    array_to_string(array_agg(distinct CAST(tci.traffic_control_incident_code as string)), ',') AS traffic_control_incident_code,
+    array_to_string(array_agg(distinct tcic.message), ',') AS incident_message,
+FROM
+    `brainer-390415`.`busup`.`traffic_control_incidents` AS tci
+LEFT JOIN
+   `brainer-390415`.`busup`.`traffic_control_incidents_codes` AS tcic
+ON
+    tcic.id = tci.traffic_control_incident_code
+WHERE
+    tci.deleted_at IS NULL
+GROUP BY
+    service_id
+)
+
+SELECT 
+    FORMAT_TIMESTAMP('%Y-%m', s.timestamp) AS year_month,
+    COUNT(*) AS count_per_month
+FROM 
+    `nikos_dribia.dbt_service` s
+INNER JOIN `brainer-390415`.`busup`.`routes` AS routes ON routes.id = s.route_id
+INNER JOIN `brainer-390415`.`busup`.`sites` AS sites ON sites.id = routes.primary_site
+INNER JOIN `brainer-390415`.`busup`.`countries` AS countries ON countries.id = sites.country_id
+LEFT JOIN service_grouped_incidents AS sgi ON s.id = sgi.service_id
+WHERE 
+    s.timestamp >= '2023-05-15 00:00:00' 
+    AND routes.circular IS FALSE
+    AND s.timestamp <= '2023-11-30 00:00:00' 
+    AND s.status IN (40,-50)
+    AND(
+    sites.country_id = 73
+    )
+    AND (
+        sgi.traffic_control_incident_code IS NULL
+        OR sgi.traffic_control_incident_code NOT LIKE '%11%'
+    )
+GROUP BY 
+    year_month
+ORDER BY 
+    year_month;

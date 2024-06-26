@@ -1,0 +1,1264 @@
+CREATE OR REPLACE PROCEDURE `brainer-390415.busup._upsert_data_since`(min_source_timestamp TIMESTAMP)
+BEGIN
+  DECLARE _src_snapshot_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
+
+MERGE brainer-390415.busup.routes AS dst
+  USING (
+    SELECT
+      r.id,
+      r.province_id,
+      r.primary_site,
+      r.invitation_code,
+      r.title,
+      r.pax,
+      r.time,
+      r.distance,
+      r.status,
+      IFNULL(crd.route_circular, 0) = 1 as circular,
+      IFNULL(crd.on_demand,0)  = 1 as on_demand,
+      r.created,
+      r.modified
+    FROM micro-rigging-390414.busup.routes AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    LEFT JOIN micro-rigging-390414.busup.commuting_routes_data crd 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on r.id = crd.route_id
+    WHERE
+      r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.province_id = src.province_id,
+      dst.primary_site = src.primary_site,
+      dst.route_code = src.invitation_code,
+      dst.title = src.title,
+      dst.pax = src.pax,
+      dst.time = src.time,
+      dst.distance = src.distance,
+      dst.status = src.status,
+      dst.circular = src.circular,
+      dst.on_demand = src.on_demand,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.services AS dst
+  USING (
+    SELECT
+      s.id,
+      r.id AS route_id,
+      s.track_id,
+      s.plan_id,
+      ps.vehicles_id AS vehicle,
+      ps.providers_id AS provider,
+      s.timestamp,
+      s.arrival_address,
+      s.arrival_timestamp,
+      s.departure_address,
+      s.departure_timestamp,
+      s.pax,
+      s.reported_departure_timestamp,
+      s.reported_arrival_timestamp,
+      s.status,
+      s.status_info,
+      s.error_type,
+      s.error_description,
+      IFNULL(s.return, 0) = 1 AS return,
+      s.tracking_quality,
+      IFNULL(s.tracking_lost,0) = 1 AS tracking_lost,
+      s.created,
+      s.modified,
+      IFNULL(s.with_incidents, 0) = 1 AS with_incidents,
+      s.incident_code_id
+    FROM micro-rigging-390414.busup.services AS s
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    INNER JOIN micro-rigging-390414.busup.routes AS r
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      ON (
+        r.external_id = s.external_route_id
+      )
+    LEFT JOIN micro-rigging-390414.busup_providers.providers_services AS ps
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      ON (
+        ps.services_id = s.id
+        AND ps.status = 1 -- ACCEPTED
+      )
+    WHERE 
+     s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.track_id = src.track_id,
+      dst.plan_id = src.plan_id,
+      dst.vehicle = src.vehicle,
+      dst.provider = src.provider,
+      dst.timestamp = src.timestamp,
+      dst.arrival_address = src.arrival_address,
+      dst.arrival_timestamp = src.arrival_timestamp,
+      dst.departure_address = src.departure_address,
+      dst.departure_timestamp = src.departure_timestamp,
+      dst.pax = src.pax,
+      dst.reported_departure_timestamp = src.reported_departure_timestamp,
+      dst.reported_arrival_timestamp = src.reported_arrival_timestamp,
+      dst.status = src.status,
+      dst.status_info = src.status_info,
+      dst.error_type = src.error_type,
+      dst.error_description = src.error_description,
+      dst.return = src.return,
+      dst.tracking_quality = src.tracking_quality,
+      dst.tracking_lost = src.tracking_lost,
+      dst.created = src.created,
+      dst.modified = src.modified,
+      dst.with_incidents = src.with_incidents,
+      dst.incident_code_id = src.incident_code_id
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.traffic_control_incidents_codes AS dst
+  USING (
+    SELECT
+      s.id,
+      s.message,
+      s.translation,
+      s.type,
+      s.created_at,
+      s.updated_at,
+      s.deleted_at
+    FROM micro-rigging-390414.busup.traffic_control_incidents_codes AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE  s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.message = src.message,
+      dst.translation = src.translation,
+      dst.type = src.type,
+      dst.created_at = src.created_at,
+      dst.updated_at = src.updated_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.traffic_control_incidents AS dst
+  USING (
+    SELECT
+      s.id,
+      s.service_id,
+      s.traffic_control_incident_code_id,
+      s.created_at,
+      s.updated_at,
+      s.deleted_at
+    FROM micro-rigging-390414.busup.traffic_control_incidents AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE  s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.service_id = src.service_id,
+      dst.traffic_control_incident_code = src.traffic_control_incident_code_id,
+      dst.created_at = src.created_at,
+      dst.updated_at = src.updated_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.traffic_control_errors AS dst
+  USING (
+    SELECT
+      s.id,
+      s.message,
+      s.translation,
+      s.created_at
+    FROM micro-rigging-390414.busup.traffic_control_error_codes AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.message = src.message,
+      dst.translation = src.translation,
+      dst.created = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.countries AS dst
+  USING (
+    SELECT
+      c.id,
+      c.name,
+      IFNULL(c.is_available, 0) = 1 AS is_available
+    FROM micro-rigging-390414.busup.countries AS c
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+     c.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.is_available = src.is_available
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.provinces AS dst
+  USING (
+    SELECT
+      p.id,
+      p.country_id,
+      p.code,
+      p.name,
+      p.base_latitude,
+      p.base_longitude,
+      p.timezone
+    FROM micro-rigging-390414.busup.provinces AS p
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+     p.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.country_id = src.country_id,
+      dst.code = src.code,
+      dst.name = src.name,
+      dst.base_latitude = src.base_latitude,
+      dst.base_longitude = src.base_longitude,
+      dst.timezone = src.timezone
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+
+  MERGE brainer-390415.busup.sites AS dst
+  USING (
+    SELECT
+      s.id,
+      cs.name,
+      s.country_id,
+      s.promoter_id,
+      cs.shape,
+      cs.site_status,
+      IFNULL(cs.group_circular_rates, 0) = 1 AS site_crosselling ,
+      cs.site_type,
+      cs.updated_at,
+      cs.created_at,
+      cs.deleted_at
+    FROM micro-rigging-390414.busup.sites AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    INNER JOIN micro-rigging-390414.busup.commuting_sites AS cs
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      ON (
+        cs.id = s.commuting_site_id
+      )
+    WHERE 
+     s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+     or cs.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.country_id = src.country_id,
+      dst.promoter_id = src.promoter_id,
+      dst.shape = src.shape,
+      dst.site_status = src.site_status,
+      dst.site_crosselling = src.site_crosselling,
+      dst.site_type = src.site_type,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+  
+  MERGE brainer-390415.busup.promoters AS dst
+  USING (
+    SELECT
+      p.id,
+      p.name,
+      p.updated_at,
+      p.created_at
+    FROM micro-rigging-390414.busup.commuting_promoters AS p
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      WHERE 
+     p.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+/*
+  MERGE brainer-390415.busup.calendar_days AS dst
+  USING (
+    SELECT
+      p.id,
+      p.calendar_id,
+      EXTRACT(DATE from p.day) as day,
+      p.updated_at,
+      p.created_at
+    FROM micro-rigging-390414.busup.commuting_cal_days AS p
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+     WHERE 
+     p.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.calendar_id = src.calendar_id,
+      dst.day = src.day,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.companies AS dst
+  USING (
+    SELECT
+      c.id,
+      c.name,
+      s.id as site_id,
+      c.latitude,
+      c.longitude,
+      c.updated_at,
+      c.created_at,
+      c.deleted_at
+    FROM micro-rigging-390414.busup.commuting_companies AS c
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    INNER JOIN micro-rigging-390414.busup.commuting_sites AS cs
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      ON (
+        cs.id = c.site_id
+      )
+    INNER JOIN micro-rigging-390414.busup.sites AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    ON (
+      cs.id = s.commuting_site_id
+    )
+    WHERE 
+    c.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.site_id = src.site_id,
+      dst.lat = src.latitude,
+      dst.lng = src.longitude,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+*/
+/*
+MERGE brainer-390415.busup.employees AS dst
+  USING (
+    SELECT
+      e.id,
+      e.company_id,
+      e.user_id,
+      e.status,
+      e.position,
+      e.number_worker,
+      e.updated_at,
+      e.created_at,
+      e.date_canceled,
+      e.deleted_at
+    FROM micro-rigging-390414.busup.commuting_employees AS e
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    e.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.company_id = src.company_id,
+      dst.user_id = src.user_id,
+      dst.status = src.status,
+      dst.position = src.position,
+      dst.number_worker = src.number_worker,
+      dst.date_canceled = src.date_canceled,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+*/
+
+/*
+MERGE brainer-390415.busup.users AS dst
+  USING (
+    SELECT
+      u.id,
+      u.first_name,
+      u.last_name,
+      u.address,
+      u.address_latitude,
+      u.address_longitude,
+      u.email,
+      u.last_online,
+      u.status,
+      u.created,
+      u.modified,
+      u.deleted_at
+    FROM micro-rigging-390414.busup.users AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.first_name = src.first_name,
+      dst.last_name = src.last_name,
+      dst.address = src.address,
+      dst.address_latitude = src.address_latitude,
+      dst.address_longitude = src.address_longitude,
+      dst.email = src.email,
+      dst.last_online = src.last_online,
+      dst.status = src.status,
+      dst.created = src.created,
+      dst.modified = src.modified,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+*/
+
+
+MERGE brainer-390415.busup.avantgrup_stop AS dst
+  USING (
+    SELECT
+      s.id,
+      s.name,
+      s.lat_wgs84,
+      s.lng_wgs84,
+      s.lat_mct,
+      s.lng_mct,
+      s.status,
+      CAST(s.date_creation AS DATE) as date_creation,
+      CAST(s.data_last_modification AS DATE) as data_last_modification,
+      s.address,
+      s.province_id,
+      IFNULL(s.door_to_door, 0) = 1 AS door_to_door
+    FROM micro-rigging-390414.avantgrupbus.stop AS s
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    s.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.lat_wgs84 = src.lat_wgs84,
+      dst.lng_wgs84 = src.lng_wgs84,
+      dst.lat_mct = src.lat_mct,
+      dst.lng_mct = src.lng_mct,
+      dst.status = src.status,
+      dst.date_creation = src.date_creation,
+      dst.date_last_modification = src.data_last_modification,
+      dst.address = src.address,
+      dst.province_id = src.province_id,
+      dst.door_to_door = src.door_to_door
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.bus_type AS dst
+  USING (
+    SELECT
+      u.id,
+      u.name,
+      u.pax,
+      u.width,
+      u.height,
+      u.longitude,
+      u.weight,
+      u.created,
+      u.modified
+    FROM micro-rigging-390414.busup.bus_types AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.pax = src.pax,
+      dst.width = src.width,
+      dst.height = src.height,
+      dst.longitude = src.longitude,
+      dst.weight = src.weight,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.drivers AS dst
+  USING (
+    SELECT
+      u.id,
+      u.provider_id,
+      u.name,
+      u.firstname as first_name,
+      u.phone,
+      IFNULL(u.active, 0) = 1 AS active,
+      u.driving_licence,
+      u.date_validity_licence,
+      u.created,
+      u.modified
+    FROM micro-rigging-390414.busup_providers.drivers AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.provider_id = src.provider_id,
+      dst.name = src.name,
+      dst.first_name = src.first_name,
+      dst.phone = src.phone,
+      dst.active = src.active,
+      dst.driving_licence = src.driving_licence,
+      dst.date_validity_licence = src.date_validity_licence,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.period_rates AS dst
+  USING (
+    SELECT
+      u.id,
+      u.name,
+      u.natural_days,
+      u.updated_at,
+      u.created_at
+    FROM micro-rigging-390414.busup.periods_rates AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.name = src.name,
+      dst.natural_days = src.natural_days,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.route_rates AS dst
+  USING (
+    SELECT
+      u.id,
+      u.route_id,
+      u.type_rate_id,
+      u.period_rate_id,
+      u.updated_at,
+      u.created_at 
+    FROM micro-rigging-390414.busup.routes_rates AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.type_rate = src.type_rate_id,
+      dst.period_rate_id = src.period_rate_id,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+  
+  MERGE brainer-390415.busup.providers AS dst
+  USING (
+    SELECT
+      u.id,
+      u.comercial_name,
+      u.direction_provider,
+      u.country,
+      u.created,
+      u.modified 
+    FROM micro-rigging-390414.busup_providers.providers AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src  
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.comercial_name = src.comercial_name,
+      dst.direction_provider = src.direction_provider,
+      dst.country = src.country,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.route_stops AS dst
+  USING (
+    SELECT
+      u.id,
+      u.external_stop_id as ag_stop,
+      u.route_id,
+      u.stop_type_id,
+      u.province_id,
+      u.requested_address,
+      u.known_title,
+      u.title,
+      u.description,
+      u.notes,
+      u.start_timestamp,
+      u.end_timestamp,
+      u.lat,
+      u.lng,
+      u.created,
+      u.modified 
+    FROM micro-rigging-390414.busup.route_stops AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    u.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.ag_stop = src.ag_stop,
+      dst.route_id = src.route_id,
+      dst.stop_type_id = src.stop_type_id,
+      dst.province_id = src.province_id,
+      dst.requested_address = src.requested_address,
+      dst.known_title = src.known_title,
+      dst.title = src.title,
+      dst.description = src.description,
+      dst.notes = src.notes,
+      dst.start_timestamp = src.start_timestamp,
+      dst.end_timestamp = src.end_timestamp,
+      dst.lat = src.lat,
+      dst.lng = src.lng,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW; 
+
+/*
+  MERGE brainer-390415.busup.route_track_points AS dst
+  USING (
+    SELECT
+      r.id,
+      r.route_id,
+      r.track_id,
+      r.route_stop_id,
+      r.lat,
+      r.lng,
+      r.segment,
+      r.created,
+      r.modified
+    FROM micro-rigging-390414.busup.route_track_points AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+    and r.route_id is not null
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.track_id = src.track_id,
+      dst.route_stop_id = src.route_stop_id,
+      dst.lat = src.lat,
+      dst.lng = src.lng,
+      dst.segment = src.segment,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+*/
+/*
+  MERGE brainer-390415.busup.route_vehicles AS dst
+  USING (
+    SELECT
+      r.id,
+      r.route_id,
+      r.bus_type_id,
+      r.pax,
+      r.car_identifier,
+      r.plate_number,
+      r.created,
+      r.modified
+    FROM micro-rigging-390414.busup.route_vehicles AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.bus_type_id = src.bus_type_id,
+      dst.pax = src.pax,
+      dst.car_identifier = src.car_identifier,
+      dst.plate_number = src.plate_number,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+    */
+
+  MERGE brainer-390415.busup.service_assignation AS dst
+  USING (
+    SELECT
+      r.id,
+      r.providers_id,
+      r.vehicles_id,
+      r.drivers_id,
+      r.services_id,
+      r.status,
+      r.created,
+      r.modified
+    FROM micro-rigging-390414.busup_providers.providers_services AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.provider = src.providers_id,
+      dst.vehicle = src.vehicles_id,
+      dst.driver = src.drivers_id,
+      dst.service_id = src.services_id,
+      dst.status = src.status,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.sites_routes AS dst
+  USING (
+    SELECT
+      r.id,
+      r.site_id,
+      r.route_id,
+      IFNULL(r.primary, 0) = 1 as primary,
+      r.publish,
+      IFNULL(r.return, 0) = 1 as return,
+      r.deleted_at
+    FROM micro-rigging-390414.busup.commuting_sites_routes AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.site_id = src.site_id,
+      dst.route_id = src.route_id,
+      dst.primary = src.primary,
+      dst.publish = src.publish,
+      dst.return = src.return,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.ticket_consumptions AS dst
+  USING (
+      SELECT
+      r.id,
+      IFNULL(rrup.id, (SELECT rrup2.id
+      FROM micro-rigging-390414.busup.tickets t2
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+      INNER JOIN micro-rigging-390414.busup.user_plans up
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp on up.id = t2.user_plan_id
+      INNER join micro-rigging-390414.busup.routes_rates_user_plans rrup2 
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp on rrup2.user_plan_id = up.id
+      INNER join micro-rigging-390414.busup.routes_rates rr
+      FOR SYSTEM_TIME AS OF _src_snapshot_timestamp on  rr.id = rrup2.routes_rate_id 
+      WHERE t2.id = t.id and t2.route_id = rr.route_id and t2.route_rate_user_plan_id is null)) as booking_id,
+      r.service_id,
+      r.timestamp,
+      IFNULL(r.error,0) = 1 as error,
+      r.message,
+      r.lat,
+      r.lng,
+      r.route_stop_id,
+      r.distance_route_stop,
+      r.created
+    FROM micro-rigging-390414.busup.ticket_consumptions AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    LEFT JOIN  micro-rigging-390414.busup.tickets t
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+     on t.id = r.ticket_id
+    LEFT join micro-rigging-390414.busup.routes_rates_user_plans rrup 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on rrup.id  = t.route_rate_user_plan_id
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.booking_id = src.booking_id,
+      dst.service_id = src.service_id,
+      dst.timestamp = src.timestamp,
+      dst.error = src.error,
+      dst.message = src.message,
+      dst.lat = src.lat,
+      dst.lng = src.lng,
+      dst.route_stop_id = src.route_stop_id,
+      dst.distance_route_stop = src.distance_route_stop,
+      dst.created = src.created
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.track_stops AS dst
+  USING (
+    SELECT
+      r.id,
+      r.track_id,
+      r.route_stop_id as stop_id,
+      r.stop_id as ag_stop,
+      r.stop_type_id,
+      r.province_id,
+      r.name,
+      r.passenger_notice,
+      r.lat,
+      r.lng,
+      TIME(EXTRACT(hour from time), EXTRACT(minute from time), EXTRACT(second from time)) as time,
+      r.seconds_until_arrival,
+      r.seconds_until_departure
+    FROM micro-rigging-390414.busup.track_stops AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.track_id = src.track_id,
+      dst.stop_id = src.stop_id,
+      dst.ag_stop = src.ag_stop,
+      dst.stop_type_id = src.stop_type_id,
+      dst.province_id = src.province_id,
+      dst.name = src.name,
+      dst.passenger_notice = src.passenger_notice,
+      dst.lat = src.lat,
+      dst.lng = src.lng,
+      dst.time = src.time,
+      dst.seconds_until_arrival = src.seconds_until_arrival,
+      dst.seconds_until_departure = src.seconds_until_departure
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.tracks AS dst
+  USING (
+    SELECT
+      r.id,
+      r.route_id,
+      r.name,
+      TIME(EXTRACT(hour from time), EXTRACT(minute from time), EXTRACT(second from time)) as time,
+      r.created_at,
+      r.updated_at,
+      r.deleted_at
+    FROM micro-rigging-390414.busup.tracks AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.name = src.name,
+      dst.time = src.time,
+      dst.created_at = src.created_at,
+      dst.updated_at = src.updated_at,
+      dst.deleted_at = src.deleted_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+/*
+  MERGE brainer-390415.busup.tracking AS dst
+  USING (
+    SELECT
+      r.id,
+      r.service_id,
+      r.driver_id,
+      r.vehicle_id,
+      r.lat,
+      r.lng,
+      r.timestamp,
+      r.created
+    FROM micro-rigging-390414.busup_conductores.tracking AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.service_id = src.service_id,
+      dst.driver_id = src.driver_id,
+      dst.vehicle_id = src.vehicle_id,
+      dst.lat = src.lat,
+      dst.lng = src.lng,
+      dst.timestamp = src.timestamp,
+      dst.created = src.created
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+*/
+
+  MERGE brainer-390415.busup.vehicles AS dst
+  USING (
+    SELECT
+      r.id,
+      r.provider_id,
+      r.plate_number,
+      r.date_plate,
+      r.number,
+      r.expiration_itv,
+      r.created,
+      r.modified
+    FROM micro-rigging-390414.busup_providers.vehicles AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.provider_id = src.provider_id,
+      dst.plate_number = src.plate_number,
+      dst.date_plate = src.date_plate,
+      dst.number = src.number,
+      dst.expiration_itv = src.expiration_itv,
+      dst.created = src.created,
+      dst.modified = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+
+
+MERGE brainer-390415.busup.ontime  AS dst
+  USING (
+    SELECT
+      r.id,
+      r.service_id,
+      r.mode,
+      r.stop_id,
+      EXTRACT(DATETIME FROM r.arrivaltime) as arrivaltime,
+      EXTRACT(DATETIME FROM r.departuretime) as departuretime,
+      r.status,
+      IFNULL(CAST(r.bypassed as INT64),0) = 1 as bypassed,
+      r.arrivallat,
+      r.arrivallng,
+      r.arrivaldistance,
+      r.departurelat,
+      r.departurelng,
+      r.departuredistance,
+      CAST(r.stop_arrival_hour as TIME) as stop_arrival_hour,
+      CAST(r.stop_departure_hour as TIME) as stop_departure_hour,
+      r.stop_address,
+      r.stop_title,
+      r.created_at,
+      r.updated_at
+    FROM micro-rigging-390414.busup_conductores.ontime AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.service_id = src.service_id,
+      dst.mode = src.mode,
+      dst.stop_id = src.stop_id,
+      dst.arrivaltime = src.arrivaltime,
+      dst.departuretime = src.departuretime,
+      dst.status = src.status,
+      dst.bypassed = src.bypassed,
+      dst.arrivallat = src.arrivallat,
+      dst.arrivallng = src.arrivallng,
+      dst.arrivaldistance = src.arrivaldistance,
+      dst.departurelat = src.departurelat,
+      dst.departurelng = src.departurelng,
+      dst.departuredistance = src.departuredistance,
+      dst.stop_arrival_hour = src.stop_arrival_hour,
+      dst.stop_departure_hour = src.stop_departure_hour,
+      dst.stop_address = src.stop_address,
+      dst.stop_title = src.stop_title,
+      dst.created_at = src.created_at,
+      dst.updated_at = src.updated_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+/*
+MERGE brainer-390415.busup.passenger_list  AS dst
+  USING (
+    SELECT
+      r.id,
+      r.service_id,
+      rrup.id as booking_id,
+      r.route_stop_id,
+      r.route_stop_destination_id
+    FROM micro-rigging-390414.busup.services_tickets AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    Inner join micro-rigging-390414.busup.tickets t 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on t.id = r.ticket_id 
+    inner join micro-rigging-390414.busup.routes_rates_user_plans rrup 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on rrup.id = t.route_rate_user_plan_id
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.service_id = src.service_id,
+      dst.booking_id = src.booking_id,
+      dst.route_stop_id = src.route_stop_id,
+      dst.route_stop_destination_id = src.route_stop_destination_id
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+    */
+
+MERGE brainer-390415.busup.route_config  AS dst
+  USING (
+    SELECT
+      r.id as id,
+      r.route_id,
+      r.calendar_id,
+      r.vinculation_route,
+      r.date_init as date_init,
+      r.date_finish as date_finish,
+      IFNULL(r.mon,0)=1 as mon,
+      IFNULL(r.tue,0)=1 as tue,
+      IFNULL(r.wed,0)=1 as wed,
+      IFNULL(r.thu,0)=1 as thu,
+      IFNULL(r.fri,0)=1 as fri,
+      IFNULL(r.sat,0)=1 as sat,
+      IFNULL(r.sun,0)=1 as sun,
+      r.updated_at as updated_at,
+      r.created_at as created_at
+    FROM micro-rigging-390414.busup.commuting_routes_data AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.calendar_id = src.calendar_id,
+      dst.vinculation_route = src.vinculation_route,
+      dst.date_init = src.date_init,
+      dst.date_finish = src.date_finish,
+      dst.mon = src.mon,
+      dst.tue = src.tue,
+      dst.wed = src.wed,
+      dst.thu = src.thu,
+      dst.fri = src.fri,
+      dst.sat = src.sat,
+      dst.sun = src.sun,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.route_plannings  AS dst
+  USING (
+    SELECT
+      r.id as id,
+      r.route_id,
+      r.track_id,
+      r.pax,
+      r.start_date,
+      r.end_date,
+      IFNULL(r.monday,0)=1 as mon,
+      IFNULL(r.tuesday,0)=1 as tue,
+      IFNULL(r.wednesday,0)=1 as wed,
+      IFNULL(r.thursday,0)=1 as thu,
+      IFNULL(r.friday,0)=1 as fri,
+      IFNULL(r.saturday,0)=1 as sat,
+      IFNULL(r.sunday,0)=1 as sun,
+      r.updated_at as updated_at,
+      r.created_at as created_at
+    FROM micro-rigging-390414.busup.route_schedules AS r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.route_id = src.route_id,
+      dst.track_id = src.track_id,
+      dst.pax = src.pax,
+      dst.start_date = src.start_date,
+      dst.end_date = src.end_date,
+      dst.mon = src.mon,
+      dst.tue = src.tue,
+      dst.wed = src.wed,
+      dst.thu = src.thu,
+      dst.fri = src.fri,
+      dst.sat = src.sat,
+      dst.sun = src.sun,
+      dst.updated_at = src.updated_at,
+      dst.created_at = src.created_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+MERGE brainer-390415.busup.bookings AS dst
+  USING (
+    SELECT
+      r.id,
+      u.user_id,
+      IFNULL(rr.route_id, rr2.routes_id) as route_id,
+      IFNULL(rr.id, rr2.id) as route_rate,
+      r.route_stop_id as route_stop_id,
+      r.route_stop_destination_id as route_stop_destination_id,
+      IFNULL(u.start_timestamp,CAST(r.reservation_start as DATETIME)) as start_timestamp,
+      IFNULL(u.end_timestamp,CAST(r.reservation_end as DATETIME)) as end_timestamp,
+      IFNULL(r.financiation,0) = 1 as financiation,
+      IFNULL(r.accept_financiation,0) = 1 as accept_financiation,
+      r.status,
+      r.price,
+      r.credits,
+      u.created,
+      u.modified
+    FROM micro-rigging-390414.busup.user_plans AS u
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    INNER JOIN micro-rigging-390414.busup.routes_rates_user_plans as r
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on r.user_plan_id = u.id
+    LEFT JOIN micro-rigging-390414.busup.routes_rates as rr 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on rr.id = r.routes_rate_id
+    LEFT JOIN micro-rigging-390414.busup.rates_routes as rr2 
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    on rr2.id = r.rate_route_id
+    WHERE 
+    r.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.user_id = src.user_id,
+      dst.route_id = src.route_id,
+      dst.route_rate = src.route_rate,
+      dst.route_stop_id = src.route_stop_id,
+      dst.route_stop_destination_id = src.route_stop_destination_id,
+      dst.start_timestamp = src.start_timestamp,
+      dst.end_timestamp = src.end_timestamp,
+      dst.financiation = src.financiation,
+      dst.accept_financiation = src.accept_financiation,
+      dst.status = src.status,
+      dst.price = src.price,
+      dst.credits = src.credits,
+      dst.created_at = src.created,
+      dst.modified_at = src.modified
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+    MERGE brainer-390415.busup.brainer_recommendations_applied AS dst
+  USING (
+    SELECT
+      p.id,
+      p.service_id,
+      p.applied_codes,
+      p.created_at,
+      p.modified_at
+    FROM micro-rigging-390414.busup.brainer_recommendations_applied AS p
+   FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+  WHERE 
+     p.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.service_id = src.service_id,
+      dst.applied_codes = src.applied_codes,
+      dst.created_at = src.created_at,
+      dst.modified_at = src.modified_at
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+  MERGE brainer-390415.busup.brainer_recommendations_config AS dst
+  USING (
+    SELECT
+      p.id,
+      p.code,
+      p.shap_value,
+      p.translation_en,
+      p.translation_es,
+      p.translation_cat,
+      p.translation_pt,
+      p.translation_pt_br
+    FROM micro-rigging-390414.busup.brainer_recommendations_config AS p
+    FOR SYSTEM_TIME AS OF _src_snapshot_timestamp
+    WHERE 
+     p.datastream_metadata.source_timestamp > UNIX_MILLIS(min_source_timestamp)
+  ) AS src
+  ON
+    src.id = dst.id
+  WHEN MATCHED THEN
+    UPDATE SET
+      dst.code = src.code,
+      dst.shap_value = src.shap_value,
+      dst.translation_en = src.translation_en,
+      dst.translation_es = src.translation_es,
+      dst.translation_cat = src.translation_cat,
+      dst.translation_pt = src.translation_pt,
+      dst.translation_pt_br = src.translation_pt_br
+  WHEN NOT MATCHED THEN
+    INSERT ROW;
+
+
+END;
